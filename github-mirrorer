@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'fileutils'
+require 'pathname'
+require 'json'
+require 'yaml'
+
+BASE_DIR = Pathname.new '/usr/local/share/github-mirrors'
+
+REPOS_URI = 'https://api.github.com/orgs/NUBIC/repos'
+REPOS_LIST = BASE_DIR + 'repo-list.json'
+REPOS_LIST_REFRESH_INTERVAL = 60 * 60 # One hour
+
+if !REPOS_LIST.readable? || (Time.now - REPOS_LIST.mtime) > REPOS_LIST_REFRESH_INTERVAL
+  unless system("curl -k #{REPOS_URI} > #{REPOS_LIST}")
+    fail "Retrieving repo list failed"
+  end
+end
+
+# REPOS_LIST is a JSON array-of-hashes, one per repo.
+
+status = JSON.parse(File.read REPOS_LIST).inject({}) do |status, repo|
+  repo_name = repo['name']
+  status[repo_name] = {}
+
+  mirror_path = BASE_DIR + "#{repo_name}.git"
+  unless mirror_path.directory?
+    status[repo_name]['clone_success'] =
+      system("git clone --mirror #{repo['git_url']} #{mirror_path}")
+  end
+  FileUtils.cd mirror_path do
+    status[repo_name]['fetch_success'] =
+      system("git fetch")
+  end
+
+  status
+end
+
+File.open(BASE_DIR + 'last_run.yml', 'w') { |f| f.write status.to_yaml }
