@@ -8,6 +8,7 @@ local mirrors to work.
 ## Requirements
 
 * Ruby 1.8.7 (probably 1.9.2+ would work also).
+* A gem which provides `json` support. E.g., `json_pure`.
 
 ## Usage
 
