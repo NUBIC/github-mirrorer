@@ -5,6 +5,10 @@ require 'fileutils'
 require 'pathname'
 require 'yaml'
 
+require 'net/http'
+require 'net/https'
+require 'uri'
+
 def bad_usage
   $stderr.puts "Usage:\n  #{$0} ORG_NAME MIRROR_TARGET"
   exit(1)
@@ -15,17 +19,37 @@ ORG_NAME = ARGV[0] || bad_usage
 BASE_DIR = Pathname.new(ARGV[1] || bad_usage)
 BASE_DIR.mkpath
 
-REPOS_URI = "https://api.github.com/orgs/#{ORG_NAME}/repos"
-REPOS_LIST = BASE_DIR + 'repo-list.json'
+REPOS_URI = "https://api.github.com:443/orgs/#{ORG_NAME}/repos"
+REPOS_LIST = BASE_DIR + 'repo-list.yml'
 REPOS_LIST_REFRESH_INTERVAL = 60 * 60 # One hour
 
 if !REPOS_LIST.readable? || (Time.now - REPOS_LIST.mtime) > REPOS_LIST_REFRESH_INTERVAL
-  unless system("curl -k #{REPOS_URI} > #{REPOS_LIST}")
-    fail "Retrieving repo list failed"
+  # GitHub's repo list API is paged with a default of 30 repos per
+  # page. It includes "Link" metadata in response list headers. This
+  # code follows each "next" link until it hits a response that does
+  # not include one.
+  repo_page_uri = URI(REPOS_URI)
+  repo_list = []
+  Net::HTTP.start(repo_page_uri.host, repo_page_uri.port, :use_ssl => true) do |http|
+    while repo_page_uri
+      response = http.request(Net::HTTP::Get.new(repo_page_uri.request_uri))
+      repo_list += YAML.load(response.body)
+
+      links = response['Link'].split(/\s*,\s*/).inject({}) { |links, header|
+        if header =~ /^<(.*?)>; rel="(\w+)"$/
+          links[$2] = $1
+        end
+        links
+      }
+
+      repo_page_uri = (links['next'] && URI(links['next']))
+    end
   end
+
+  File.open(REPOS_LIST, 'w') { |f| f.write repo_list.to_yaml }
 end
 
-# REPOS_LIST is a JSON array-of-hashes, one per repo.
+# REPOS_LIST is a YAML array-of-hashes, one per repo.
 
 status = YAML.load(File.read REPOS_LIST).inject({}) do |status, repo|
   repo_name = repo['name']
