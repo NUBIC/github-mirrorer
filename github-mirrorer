@@ -3,12 +3,19 @@
 require 'rubygems'
 require 'fileutils'
 require 'pathname'
-require 'json'
 require 'yaml'
 
-BASE_DIR = Pathname.new '/usr/local/share/github-mirrors'
+def bad_usage
+  $stderr.puts "Usage:\n  #{$0} ORG_NAME MIRROR_TARGET"
+  exit(1)
+end
 
-REPOS_URI = 'https://api.github.com/orgs/NUBIC/repos'
+ORG_NAME = ARGV[0] || bad_usage
+
+BASE_DIR = Pathname.new(ARGV[1] || bad_usage)
+BASE_DIR.mkpath
+
+REPOS_URI = "https://api.github.com/orgs/#{ORG_NAME}/repos"
 REPOS_LIST = BASE_DIR + 'repo-list.json'
 REPOS_LIST_REFRESH_INTERVAL = 60 * 60 # One hour
 
@@ -20,7 +27,7 @@ end
 
 # REPOS_LIST is a JSON array-of-hashes, one per repo.
 
-status = JSON.parse(File.read REPOS_LIST).inject({}) do |status, repo|
+status = YAML.load(File.read REPOS_LIST).inject({}) do |status, repo|
   repo_name = repo['name']
   status[repo_name] = {}
 
