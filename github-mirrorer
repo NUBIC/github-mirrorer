@@ -11,7 +11,7 @@ require 'net/https'
 require 'uri'
 
 def bad_usage
-  $stderr.puts "Usage:\n  #{$0} ORG_NAME MIRROR_TARGET"
+  $stderr.puts "Usage:\n  #{$0} ORG_NAME MIRROR_TARGET [REPO1,REPO2,...]"
   exit(1)
 end
 
@@ -19,6 +19,11 @@ ORG_NAME = ARGV[0] || bad_usage
 
 BASE_DIR = Pathname.new(ARGV[1] || bad_usage)
 BASE_DIR.mkpath
+
+INTERESTING_REPOS =
+  if ARGV[2]
+    ARGV[2].split(',')
+  end
 
 REPOS_URI = "https://api.github.com:443/orgs/#{ORG_NAME}/repos"
 REPOS_LIST = BASE_DIR + 'repo-list.yml'
@@ -62,6 +67,8 @@ end
 
 status = YAML.load(File.read REPOS_LIST).inject({}) do |status, repo|
   repo_name = repo['name']
+  next status unless (INTERESTING_REPOS.nil? || INTERESTING_REPOS.include?(repo_name))
+
   status[repo_name] = {}
 
   mirror_path = BASE_DIR + "#{repo_name}.git"
