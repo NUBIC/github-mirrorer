@@ -39,12 +39,17 @@ if !REPOS_LIST.readable? || (Time.now - REPOS_LIST.mtime) > REPOS_LIST_REFRESH_I
       File.open(BASE_DIR + 'body', 'w') { |f| f.write response.body }
       repo_list += JSON.parse(response.body)
 
-      links = response['Link'].split(/\s*,\s*/).inject({}) { |links, header|
-        if header =~ /^<(.*?)>; rel="(\w+)"$/
-          links[$2] = $1
+      links =
+        if response['Link']
+          response['Link'].split(/\s*,\s*/).inject({}) { |links, header|
+            if header =~ /^<(.*?)>; rel="(\w+)"$/
+              links[$2] = $1
+            end
+            links
+          }
+        else
+          {}
         end
-        links
-      }
 
       repo_page_uri = (links['next'] && URI(links['next']))
     end
